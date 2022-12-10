@@ -94,9 +94,7 @@ async function proc3() {
 // print out everything
 async function proc0() {
     const opts0 = { withInfo: true, withTags: true, batchMode: false };
-    //const out = process.argv[3];
     for await (let item of createOSMStream(file, opts0)) {
-        //writeFileSync(out, JSON.stringify(item) + '\n');
         process.stdout.write(JSON.stringify(item) + '\n');
     }
 }
@@ -106,12 +104,7 @@ if (!Number.isInteger(arg) || arg < 0 || arg > 3) {
     process.stderr.write(usage);
     process.exit(1);
 }
-/*
-if (arg == 0 && !process.argv[3]) {
-    console.log('add output file name');
-    process.exit(1);
-}
-*/
+
 const proc = [proc0, proc1, proc2, proc3];
 
 try {
