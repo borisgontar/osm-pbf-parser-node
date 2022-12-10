@@ -1,25 +1,30 @@
 {
-  "name": "osm-pbf-parser-node",
-  "version": "1.0.0",
-  "description": "Streaming OpenStreetMap PBF parser for Node.js",
-  "main": "parser.js",
-  "type": "module",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [
-    "javascript",
-    "node.js",
-    "OSM",
-    "OpenStreetMap",
-    "protobuf",
-    "pbf",
-    "streaming",
-    "parser"
-  ],
-  "author": "Boris Gontar",
-  "license": "MIT",
-  "dependencies": {
-    "pbf": "^3.2.1"
-  }
+    "name": "osm-pbf-parser-node",
+    "version": "1.0.0",
+    "description": "Streaming OpenStreetMap PBF parser for Node.js",
+    "main": "parser.js",
+    "type": "module",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "javascript",
+        "node.js",
+        "OSM",
+        "OpenStreetMap",
+        "protobuf",
+        "pbf",
+        "streaming",
+        "parser"
+    ],
+    "author": "Boris Gontar",
+    "license": "MIT",
+    "dependencies": {
+        "pbf": "^3.2.1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/borisgontar/osm-pbf-parser-node.git"
+    },
+    "homepage": "https://github.com/borisgontar/osm-pbf-parser-node"
 }
