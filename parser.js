@@ -154,7 +154,7 @@ function parse_rel(r, data) {
             role: strings[r.roles_sid[i]]
         });
     }
-    assert(members.length > 0, 'no members in relation ' + r.id);
+    //assert(members.length > 0, 'no members in relation ' + r.id);
     const rel = {
         type: 'relation',
         id: r.id,
@@ -185,7 +185,7 @@ function parse_way(w, data) {
     for (let i = 0; i < w.refs.length; i++) {
         refs.push(ref += w.refs[i]);
     }
-    assert(refs.length > 0, 'no nodes in way ' + w.id);
+    //assert(refs.length > 0, 'no nodes in way ' + w.id);
     const way = {
         type: 'way',
         id: w.id,
