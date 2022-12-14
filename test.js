@@ -5,12 +5,11 @@ import { get as http_get } from 'node:http';
 
 // feel free to change the following three lines
 
-const file = '../data/cyprus-latest-internal.osm.pbf';
+const file = '../data/canada-latest.osm.pbf';
 const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
 const opts = {
-    withInfo: true,
-    withTags: true,
-    batchMode: false
+    withInfo: false,
+    withTags: true
 };
 
 const usage = `
@@ -38,11 +37,8 @@ function count(item) {
 const final = new Transform.PassThrough({
     objectMode: true,
     transform: (items, enc, next) => {
-        if (Array.isArray(items)) {
-            for (let item of items)
-                count(item);
-        } else
-            count(items);
+        for (let item of items)
+            count(item);
         next();
     }
 });
@@ -50,7 +46,7 @@ const final = new Transform.PassThrough({
 // test OSMTransform
 async function proc1() {
     console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}, batchMode: ${opts.batchMode}`);
+        `withTags: ${opts.withTags}`);
     return new Promise(resolve => {
         createReadStream(file)
             .pipe(new OSMTransform(opts))
@@ -63,20 +59,16 @@ async function proc1() {
 // test createOSMStream
 async function proc2() {
     console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}, batchMode: ${opts.batchMode}`);
+        `withTags: ${opts.withTags}`);
     for await (let item of createOSMStream(file, opts)) {
-        if (Array.isArray(item)) {
-            for (let t of item)
-                count(t);
-        } else
-            count(item);
+        count(item);
     }
 }
 
 // test http get
 async function proc3() {
     console.log(`reading from ${url}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}, batchMode: ${opts.batchMode}`);
+        `withTags: ${opts.withTags}`);
     return new Promise((resolve, reject) => {
         http_get(url, res => {
             if (res.statusCode != 200) {
@@ -93,7 +85,7 @@ async function proc3() {
 
 // print out everything
 async function proc0() {
-    const opts0 = { withInfo: true, withTags: true, batchMode: false };
+    const opts0 = { withInfo: true, withTags: true };
     for await (let item of createOSMStream(file, opts0)) {
         process.stdout.write(JSON.stringify(item) + '\n');
     }

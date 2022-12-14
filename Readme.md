@@ -105,12 +105,9 @@ and an object with the following properties:
 
 `withInfo` - whether to include metadata information into output
 
-`batchMode` - whether to yield individual entities or arrays
-of entities, which make things a bit faster.
-
 The defaults are:
 ```javascript
-{ withTags: true, withInfo: false, batchMode: false }
+{ withTags: true, withInfo: false }
 ```
 
 The module also exports the OSMTransform class:
@@ -131,8 +128,7 @@ new Promise(resolve => {
 
 ```
 where `consume` is the final Writable. For example,
-the following code just prints out all received objects (assuming that
-`osmopts.batchMode = true`):
+the following code just prints out all received objects:
 ```javascript
 const consume = new Transform.PassThrough({
     objectMode: true,
@@ -143,6 +139,10 @@ const consume = new Transform.PassThrough({
     }
 });
 ```
+Note that the Writable side always receives arrays of items.
+The length of such arrays can vary from 1 (e.g. for OSMHeader)
+to several thousands.
+
 The following example shows how to use OSMTransform for reading directly from an URL:
 ```javascript
 import { get as http_get } from 'node:http';
@@ -159,6 +159,20 @@ new Promise((resolve, reject) => {
 });
 ```
 See file `test.js` for a complete example.
+
+## Performance
+
+The script `test.js` does nothing but counts nodes, ways and relations
+in the input stream. Here is the output for canada-latest.osm.pbf
+as of Nov. 2022, about 2.75 GB in size, on my ASUS StudioBook
+(i7-9750H, DDR4-2666):
+
+* using OSMTransform: 2m51s, about 2.36 millions items per second
+
+* using createOSMStream: 4m35s, about 1.47 millions items per second
+
+Apparenlty, the speed of createOSMStream is 1.6 times lower because it executes
+`yield` millions of times.
 
 ## Notes
 

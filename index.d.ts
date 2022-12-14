@@ -4,8 +4,7 @@ declare module 'osm-pbf-parser-node' {
 
     export interface OSMOptions {
         withTags?: boolean,
-        withInfo?: boolean,
-        batchMode?: boolean,
+        withInfo?: boolean
     };
 
     export class OSMTransform extends Transform {

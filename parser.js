@@ -41,8 +41,7 @@ export class OSMTransform extends Transform {
         }));
         this.with = {
             withTags: osmopts.withTags ?? true,
-            withInfo: osmopts.withInfo ?? false,
-            batchMode: osmopts.batchMode ?? false
+            withInfo: osmopts.withInfo ?? false
         };
         /** @type {Buffer} */
         this.buffer = null;
@@ -91,7 +90,7 @@ export class OSMTransform extends Transform {
                 const buf = blob.zlib_data ? inflateSync(blob.zlib_data) : blob.raw;
                 assert(buf, `inflating ${blob.data} not implemented`);
                 const header = HeaderBlock.read(new Pbf(buf));
-                this.push(this.with.batchMode ? [header] : header);
+                this.push([header]);
                 this.offset += this.needed;
                 this.needed = 4;   // next header length follows
                 this.status = 0;
@@ -316,10 +315,7 @@ export async function* createOSMStream(file, opts) {
     const readable = createReadStream(file)
         .pipe(new OSMTransform(opts));
     for await (const chunk of readable) {
-        if (Array.isArray(chunk)) {
             for (const item of chunk)
                 yield item;
-        } else
-            yield chunk;
     }
 }
