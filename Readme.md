@@ -105,6 +105,12 @@ and an object with the following properties:
 
 `withInfo` - whether to include metadata information into output
 
+`filter` - an object with optional properties `node`, `way` and `relation`,
+each of them is a string array with accepted tag keys. Tags with all
+other keys are ignored. If `filter` is absent, all tags are accepted.
+If, for example, filter.node is absent, all node tags are accepted,
+but if it's an empty array, all node tags are ignored.
+
 The defaults are:
 ```javascript
 { withTags: true, withInfo: false }

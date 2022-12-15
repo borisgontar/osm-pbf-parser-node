@@ -9,7 +9,12 @@ const file = '../data/canada-latest.osm.pbf';
 const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
 const opts = {
     withInfo: false,
-    withTags: true
+    withTags: true,
+    filter: {
+        node: ['name', 'amenity', 'shop'],
+        way: [],
+        relation: ['boundary']
+    }
 };
 
 const usage = `
@@ -46,7 +51,7 @@ const final = new Transform.PassThrough({
 // test OSMTransform
 async function proc1() {
     console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}`);
+        `withTags: ${opts.withTags}, filter: ${opts.filter ? 'yes' : 'no'}`);
     return new Promise(resolve => {
         createReadStream(file)
             .pipe(new OSMTransform(opts))
@@ -59,7 +64,7 @@ async function proc1() {
 // test createOSMStream
 async function proc2() {
     console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}`);
+        `withTags: ${opts.withTags}, filter: ${opts.filter ? 'yes' : 'no'}`);
     for await (let item of createOSMStream(file, opts)) {
         count(item);
     }
@@ -68,7 +73,7 @@ async function proc2() {
 // test http get
 async function proc3() {
     console.log(`reading from ${url}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}`);
+        `withTags: ${opts.withTags}, filter: ${opts.filter ? 'yes' : 'no'}`);
     return new Promise((resolve, reject) => {
         http_get(url, res => {
             if (res.statusCode != 200) {

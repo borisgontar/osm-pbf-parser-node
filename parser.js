@@ -41,7 +41,8 @@ export class OSMTransform extends Transform {
         }));
         this.with = {
             withTags: osmopts.withTags ?? true,
-            withInfo: osmopts.withInfo ?? false
+            withInfo: osmopts.withInfo ?? false,
+            filter: osmopts.filter ?? null
         };
         /** @type {Buffer} */
         this.buffer = null;
@@ -108,6 +109,12 @@ export class OSMTransform extends Transform {
                 data.lon_offset *= 1e-9;
                 data.withTags = this.with.withTags;
                 data.withInfo = this.with.withInfo;
+                const filter = this.with.filter;
+                data.filter = {
+                    node: filter?.node ? new Set(filter.node) : null,
+                    way: filter?.way ? new Set(filter.way) : null,
+                    relation: filter?.relation ? new Set(filter.relation) : null
+                }
                 const batch = [];
                 for (const p of data.primitivegroup) {
                     if (p.changesets && p.changesets.length > 0)
@@ -153,7 +160,6 @@ function parse_rel(r, data) {
             role: strings[r.roles_sid[i]]
         });
     }
-    //assert(members.length > 0, 'no members in relation ' + r.id);
     const rel = {
         type: 'relation',
         id: r.id,
@@ -161,10 +167,12 @@ function parse_rel(r, data) {
     }
     if (data.withTags) {
         assertArrays(r.keys, r.vals);
+        const filter = data.filter.relation;
         const tags = {};
         for (let i = 0; i < r.keys.length; i++) {
-            const key = r.keys[i], val = r.vals[i];
-            tags[strings[key]] = strings[val];
+            const key = strings[r.keys[i]], val = strings[r.vals[i]];
+            if (!filter || filter.has(key))
+                tags[key] = val;
         }
         if (!isEmpty(tags))
             rel.tags = tags;
@@ -184,7 +192,6 @@ function parse_way(w, data) {
     for (let i = 0; i < w.refs.length; i++) {
         refs.push(ref += w.refs[i]);
     }
-    //assert(refs.length > 0, 'no nodes in way ' + w.id);
     const way = {
         type: 'way',
         id: w.id,
@@ -192,9 +199,12 @@ function parse_way(w, data) {
     }
     if (data.withTags) {
         assertArrays(w.keys, w.vals);
+        const filter = data.filter.way;
         const tags = {};
         for (let i = 0; i < w.keys.length; i++) {
-            tags[strings[w.keys[i]]] = strings[w.vals[i]];
+            const key = strings[w.keys[i]], val = strings[w.vals[i]];
+            if (!filter || filter.has(key))
+                tags[key] = val;
         }
         if (!isEmpty(tags))
             way.tags = tags;
@@ -217,9 +227,12 @@ function parse_node(n, data) {
     }
     if (data.withTags) {
         assertArrays(n.keys, n.vals);
+        const filter = data.filter.node;
         const tags = {};
         for (let i = 0; i < n.keys.length; i++) {
-            tags[strings[n.keys[i]]] = strings[n.vals[i]]
+            const key = strings[n.keys[i]], val = strings[n.vals[i]];
+            if (!filter || filter.has(key))
+                tags[key] = val;
         }
         if (!isEmpty(tags))
             node.tags = tags;
@@ -253,9 +266,13 @@ function parse_dense(dense, data) {
             lon: data.lon_offset + lon / data.granularity
         }
         if (data.withTags && dense.keys_vals.length > 0) {
+            const filter = data.filter.node;
             const tags = {};
             while (dense.keys_vals[j] !== 0) {
-                tags[strings[dense.keys_vals[j]]] = strings[dense.keys_vals[j + 1]];
+                const key = strings[dense.keys_vals[j]];
+                const val = strings[dense.keys_vals[j + 1]];
+                if (!filter || filter.has(key))
+                    tags[key] = val;
                 j += 2;
             }
             j++;
