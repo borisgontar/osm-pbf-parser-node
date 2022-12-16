@@ -5,7 +5,7 @@ import { get as http_get } from 'node:http';
 
 // feel free to change the following three lines
 
-const file = '../data/canada-latest.osm.pbf';
+const file = '../data/ontario-latest.osm.pbf';
 const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
 const opts = {
     withInfo: false,

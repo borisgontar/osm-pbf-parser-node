@@ -1,6 +1,6 @@
 {
     "name": "osm-pbf-parser-node",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Streaming OpenStreetMap PBF parser for Node.js",
     "main": "parser.js",
     "type": "module",

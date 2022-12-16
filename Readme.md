@@ -2,7 +2,7 @@
 
 Streaming [OpenStreetMap PBF](https://wiki.openstreetmap.org/wiki/PBF_Format) parser
 
-This Node.js module reads a writable stream in osm.pbf format and transforms it
+This Node.js module reads a stream in osm.pbf format and transforms it
 into a readable stream of OSM entities (header, nodes, ways and relations).
 
 The module uses (more or less) recent Javascript features, like
