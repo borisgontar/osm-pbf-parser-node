@@ -1,9 +1,9 @@
 import { Transform } from 'node:stream';
-import { inflateSync } from 'node:zlib';
+import { inflateSync, inflate } from 'node:zlib';
 import { createReadStream } from 'node:fs';
 import Pbf from 'pbf';
-import { Blob as BlobData, BlobHeader } from './fileformat.js';
-import { HeaderBlock, PrimitiveBlock } from './osmformat.js';
+import { Blob as BlobData, BlobHeader } from './proto/fileformat.js';
+import { HeaderBlock, PrimitiveBlock } from './proto/osmformat.js';
 
 const memberTypes = ['node', 'way', 'relation'];
 
@@ -37,18 +37,27 @@ export class OSMTransform extends Transform {
             writableObjectMode: false,
             writableHighWaterMark: 0,
             readableObjectMode: true,
-            readableHighWaterMark: 1
+            readableHighWaterMark: 2
         }));
         this.with = {
             withTags: osmopts.withTags ?? true,
             withInfo: osmopts.withInfo ?? false,
+            syncMode: osmopts.syncMode ?? false,
             filter: osmopts.filter ?? null
         };
         /** @type {Buffer} */
         this.buffer = null;
         this.offset = 0;     // current offset in the buffer
-        this.status = 0;     // 0: header length, 1: header, 2: data
+        this.status = 0;     // 0: header length, 1: header,
+                             // 2: OSMHeader, 3: OSMData
         this.needed = 4;     // number of bytes required in the buffer
+        this.jobs = 0;       // number of unfinished inflates
+        this.done = null;
+        this.maxjobs = 0; // --
+        this.maxdepo = 0; // --
+        this.tally = 0;      // counts incoming OSMData blocks
+        this.count = 0;      // tally of the last pushed batch
+        this.depot = new Map();  // seqnum -> batch
     }
 
     _transform(chunk, encoding, next) {
@@ -70,9 +79,9 @@ export class OSMTransform extends Transform {
                 return next();       // _transform will be called with the next chunk
 
             if (this.status == 0) {  // expecting int32 with the header length
-                fwd(4);
+                advance(4);
                 const l = this.buffer.readUInt32BE(this.offset);
-                fwd(l);
+                advance(l);
                 this.offset += this.needed;
                 this.needed = l;     // header of this length follows
                 this.status = 1;
@@ -83,7 +92,7 @@ export class OSMTransform extends Transform {
                     'input sequence error');
                 this.offset += this.needed;
                 this.needed = header.datasize;   // data of this length follows
-                fwd(header.datasize);
+                advance(header.datasize);
                 this.status = header.type == 'OSMHeader' ? 2 : 3
             }
             else if (this.status == 2) {   // expectong OSMHeader
@@ -98,54 +107,106 @@ export class OSMTransform extends Transform {
             }
             else if (this.status == 3) {    // expecting OSMData
                 const blob = BlobData.read(pbf);
-                const buf = blob.zlib_data ? inflateSync(blob.zlib_data) : blob.raw;
-                assert(buf, `inflating ${blob.data} not implemented`);
-                const data = PrimitiveBlock.read(new Pbf(buf));
-                data.strings = data.stringtable.s.map(b => b.toString('utf8'));
-                data.date_granularity = data.date_granularity || 1000;
-                data.granularity = (!data.granularity || data.granularity == 100) ? 1e7
-                    : 1e9 / data.granularity;
-                data.lat_offset *= 1e-9;
-                data.lon_offset *= 1e-9;
-                data.withTags = this.with.withTags;
-                data.withInfo = this.with.withInfo;
-                const filter = this.with.filter;
-                data.filter = {
-                    node: filter?.node ? new Set(filter.node) : null,
-                    way: filter?.way ? new Set(filter.way) : null,
-                    relation: filter?.relation ? new Set(filter.relation) : null
+                assert(blob.zlib_data, `inflating ${blob.data} not implemented`);
+                if (this.with.syncMode) {
+                    const buf = inflateSync(blob.zlib_data);
+                    const data = PrimitiveBlock.read(new Pbf(buf));
+                    this.push(parse(data, this.with));
                 }
-                const batch = [];
-                for (const p of data.primitivegroup) {
-                    if (p.changesets && p.changesets.length > 0)
-                        throw new Error('changesets not implemented');
-                    if (p.nodes) {
-                        for (const n of p.nodes)
-                            batch.push(parse_node(n, data));
-                    }
-                    if (p.dense)
-                        batch.push(...parse_dense(p.dense, data));
-                    if (p.ways) {
-                        for (const w of p.ways)
-                            batch.push(parse_way(w, data));
-                    }
-                    if (p.relations) {
-                        for (const r of p.relations)
-                            batch.push(parse_rel(r, data));
-                    }
+                else {
+                    blob.tally = ++this.tally;
+                    ++this.jobs;
+                    this.maxjobs = Math.max(this.maxjobs, this.jobs);  // --
+                    inflate(blob.zlib_data, (err, buf) => {
+                        assert(!err, `error uncompressing OSMData: ${err}`);
+                        blob.zlib_data = null;    // no longer needed
+                        const tally = blob.tally;
+                        const data = PrimitiveBlock.read(new Pbf(buf));
+                        const batch = parse(data, this.with);
+                        if (tally == this.count + 1) {
+                            this.push(batch);
+                            ++this.count;
+                        } else
+                            this.depot.set(tally, batch);
+                        this.maxdepo = Math.max(this.maxdepo, this.depot.size); // --
+                        while (this.depot.has(this.count + 1)) {
+                            this.push(this.depot.get(++this.count));
+                            this.depot.delete(this.count);
+                        }
+                        if (--this.jobs == 0 && this.done)
+                            this.done.resolve();
+                    });
                 }
-                this.push(batch);
                 this.offset += this.needed;
                 this.needed = 4;   // next header length follows
                 this.status = 0;
             }
         }
 
-        function fwd(step) {
+        function advance(step) {
             pbf.pos = pbf.length;
             pbf.length += step;
         }
     }
+
+    _flush(callback) {
+        console.log(`max jobs: ${this.maxjobs}`);
+        console.log(`max depot size: ${this.maxdepo}`);
+        if (this.jobs == 0) {
+            this.flush_depot();
+            callback();
+        } else {
+            new Promise(resolve => this.done = { resolve })
+                .then(() => {
+                    this.flush_depot();
+                    callback();
+                });
+        }
+    }
+
+    flush_depot() {
+        const keys = Array.from(this.depot.keys());
+        for (let n of keys.sort((x, y) => x - y)) {
+            this.push(this.depot.get(n));
+        }
+    }
+}
+
+function parse(data, opts) {
+    data.withTags = opts.withTags;
+    data.withInfo = opts.withInfo;
+    const filter = opts.filter;
+    data.filter = {
+        node: filter?.node ? new Set(filter.node) : null,
+        way: filter?.way ? new Set(filter.way) : null,
+        relation: filter?.relation ? new Set(filter.relation) : null
+    }
+    data.strings = data.stringtable.s.map(b => b.toString('utf8'));
+    data.date_granularity = data.date_granularity || 1000;
+    data.granularity = (!data.granularity || data.granularity == 100) ? 1e7
+        : 1e9 / data.granularity;
+    data.lat_offset *= 1e-9;
+    data.lon_offset *= 1e-9;
+    const batch = [];
+    for (const p of data.primitivegroup) {
+        if (p.changesets && p.changesets.length > 0)
+            throw new Error('changesets not implemented');
+        if (p.nodes) {
+            for (const n of p.nodes)
+                batch.push(parse_node(n, data));
+        }
+        if (p.dense)
+            batch.push(...parse_dense(p.dense, data));
+        if (p.ways) {
+            for (const w of p.ways)
+                batch.push(parse_way(w, data));
+        }
+        if (p.relations) {
+            for (const r of p.relations)
+                batch.push(parse_rel(r, data));
+        }
+    }
+    return batch;
 }
 
 function parse_rel(r, data) {

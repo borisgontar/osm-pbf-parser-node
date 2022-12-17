@@ -17,7 +17,8 @@ for await (let item of createOSMStream('path-to-file.osm.pbf'))
     console.log(item);
 ```
 The output will look like the following.
-* The OSM Header block:
+
+The OSM Header block:
 ```javascript
 {
   bbox: { left: -95159650000, right: -74309980000, top: 57508260000, bottom: 41637700000 },
@@ -30,7 +31,7 @@ The output will look like the following.
   osmosis_replication_base_url: 'http://download.geofabrik.de/north-america/canada/ontario-updates'
 }
 ```
-* For every node:
+For every node:
 ```javascript
 {
     "type":"node",
@@ -51,7 +52,7 @@ The output will look like the following.
 }
 ```
 
-* For every way:
+For every way:
 ```javascript
 {
     "type":"way",
@@ -64,7 +65,7 @@ The output will look like the following.
 }
 ```
 
-* For every relation:
+For every relation:
 ```javascript
 {
     "type":"relation",
@@ -101,11 +102,13 @@ export async function* createOSMStream(file: string, opts?: OSMOptions): void;
 The arguments are path to the input file in the osm.pbf format
 and an object with the following properties:
 
-`withTags` - whether to include tags into the output
+* `withTags` - whether to include tags into the output.
 
-`withInfo` - whether to include metadata information into output
+* `withInfo` - whether to include metadata information into output.
 
-`filter` - an object with optional properties `node`, `way` and `relation`,
+* `syncMode` - whether to use `inflate` or `inflateSync` from node:zlib.
+
+* `filter` - an object with optional properties `node`, `way` and `relation`,
 each of them is a string array with accepted tag keys. Tags with all
 other keys are ignored. If `filter` is absent, all tags are accepted.
 If, for example, filter.node is absent, all node tags are accepted,
@@ -113,7 +116,7 @@ but if it's an empty array, all node tags are ignored.
 
 The defaults are:
 ```javascript
-{ withTags: true, withInfo: false }
+{ withTags: true, withInfo: false, syncMode: false }
 ```
 
 The module also exports the OSMTransform class:
@@ -147,7 +150,8 @@ const consume = new Transform.PassThrough({
 ```
 Note that the Writable side always receives arrays of items.
 The length of such arrays can vary from 1 (e.g. for OSMHeader)
-to several thousands.
+to several thousands. The order of items in the output is always
+the same as the order in the input stream.
 
 The following example shows how to use OSMTransform for reading directly from an URL:
 ```javascript
@@ -179,6 +183,17 @@ as of Nov. 2022, about 2.75 GB in size, on my ASUS StudioBook
 
 Apparenlty, the speed of createOSMStream is 1.6 times lower because it executes
 `yield` millions of times.
+
+By default this module uses the asynchronous `inflate` from `node:zlib'.
+It results in better speed (I haven't seen more that 10% though)
+but uses more memory. You can switch to `inflateSync` by setting `syncMode`
+to `false`.
+
+## Limitations
+
+The OSMData blocks are supposed to be inflatable by `inflate` from `node:zlib`,
+the compressed data in `zlib_data`. Other compression methods are not
+implemented.
 
 ## Notes
 

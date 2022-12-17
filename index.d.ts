@@ -5,6 +5,7 @@ declare module 'osm-pbf-parser-node' {
     export interface OSMOptions {
         withTags?: boolean,
         withInfo?: boolean,
+        syncMode?: boolean,
         filter?: {
             node?: string[],
             way?: string[],
