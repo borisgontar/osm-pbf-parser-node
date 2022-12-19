@@ -2,15 +2,12 @@ declare module 'osm-pbf-parser-node' {
 
     import { Transform, TransformOptions } from 'node:stream';
 
+    type WithTags = boolean | string[];
+
     export interface OSMOptions {
-        withTags?: boolean,
+        withTags?: boolean | {node?: WithTags, way?: WithTags, relation?: WithTags},
         withInfo?: boolean,
-        syncMode?: boolean,
-        filter?: {
-            node?: string[],
-            way?: string[],
-            relation?: string[]
-        }
+        syncMode?: boolean
     };
 
     export class OSMTransform extends Transform {

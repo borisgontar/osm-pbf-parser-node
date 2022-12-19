@@ -3,19 +3,18 @@ import { Transform } from 'node:stream';
 import { createOSMStream, OSMTransform } from './parser.js';
 import { get as http_get } from 'node:http';
 
-// feel free to change the following three lines
+// feel free to change the following three settings
 
-const file = '../data/canada-latest.osm.pbf';
+const file = '../data/cyprus-latest.osm.pbf';
 const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
 const opts = {
     withInfo: false,
-    withTags: true,
-    syncMode: false,
-    filter: {
+    withTags: {
         node: ['name', 'amenity', 'shop'],
         way: [],
         relation: ['boundary']
-    }
+    },
+    syncMode: false
 };
 
 const usage = `
@@ -52,7 +51,7 @@ const final = new Transform.PassThrough({
 // test OSMTransform
 async function proc1() {
     console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}, filter: ${opts.filter ? 'yes' : 'no'}`);
+        `withTags: ${JSON.stringify(opts.withTags)}`);
     return new Promise(resolve => {
         createReadStream(file)
             .pipe(new OSMTransform(opts))
@@ -65,7 +64,7 @@ async function proc1() {
 // test createOSMStream
 async function proc2() {
     console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}, filter: ${opts.filter ? 'yes' : 'no'}`);
+        `withTags: ${JSON.stringify(opts.withTags)}`);
     for await (let item of createOSMStream(file, opts)) {
         count(item);
     }
@@ -74,7 +73,7 @@ async function proc2() {
 // test http get
 async function proc3() {
     console.log(`reading from ${url}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${opts.withTags}, filter: ${opts.filter ? 'yes' : 'no'}`);
+        `withTags: ${JSON.stringify(opts.withTags)}`);
     return new Promise((resolve, reject) => {
         http_get(url, res => {
             if (res.statusCode != 200) {

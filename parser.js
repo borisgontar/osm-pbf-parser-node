@@ -40,10 +40,9 @@ export class OSMTransform extends Transform {
             readableHighWaterMark: 2
         }));
         this.with = {
-            withTags: osmopts.withTags ?? true,
+            withTags: with_tags(osmopts.withTags),
             withInfo: osmopts.withInfo ?? false,
-            syncMode: osmopts.syncMode ?? false,
-            filter: osmopts.filter ?? null
+            syncMode: osmopts.syncMode ?? false
         };
         /** @type {Buffer} */
         this.buffer = null;
@@ -53,8 +52,8 @@ export class OSMTransform extends Transform {
         this.needed = 4;     // number of bytes required in the buffer
         this.jobs = 0;       // number of unfinished inflates
         this.done = null;
-        this.maxjobs = 0; // --
-        this.maxdepo = 0; // --
+        //this.maxjobs = 0; // --
+        //this.maxdepo = 0; // --
         this.tally = 0;      // counts incoming OSMData blocks
         this.count = 0;      // tally of the last pushed batch
         this.depot = new Map();  // seqnum -> batch
@@ -116,7 +115,7 @@ export class OSMTransform extends Transform {
                 else {
                     blob.tally = ++this.tally;
                     ++this.jobs;
-                    this.maxjobs = Math.max(this.maxjobs, this.jobs);  // --
+                    //this.maxjobs = Math.max(this.maxjobs, this.jobs);  // --
                     inflate(blob.zlib_data, (err, buf) => {
                         assert(!err, `error uncompressing OSMData: ${err}`);
                         blob.zlib_data = null;    // no longer needed
@@ -128,7 +127,7 @@ export class OSMTransform extends Transform {
                             ++this.count;
                         } else
                             this.depot.set(tally, batch);
-                        this.maxdepo = Math.max(this.maxdepo, this.depot.size); // --
+                        //this.maxdepo = Math.max(this.maxdepo, this.depot.size); // --
                         while (this.depot.has(this.count + 1)) {
                             this.push(this.depot.get(++this.count));
                             this.depot.delete(this.count);
@@ -150,8 +149,8 @@ export class OSMTransform extends Transform {
     }
 
     _flush(callback) {
-        console.log(`max jobs: ${this.maxjobs}`);
-        console.log(`max depot size: ${this.maxdepo}`);
+        //console.log(`max jobs: ${this.maxjobs}`);
+        //console.log(`max depot size: ${this.maxdepo}`);
         if (this.jobs == 0) {
             this.flush_depot();
             callback();
@@ -172,15 +171,31 @@ export class OSMTransform extends Transform {
     }
 }
 
+function with_tags(opt) {
+    if (typeof opt == 'boolean')
+        return { node: opt, way: opt, relation: opt };
+    let result = {};
+    if (typeof opt == 'object' && opt != null) {
+        for (let k of ['node', 'way', 'relation']) {
+            let b = opt[k] ?? true;
+            if (typeof b == 'boolean')
+                result[k] = b;
+            else if (Array.isArray(b))
+                result[k] = b.length > 0 ? new Set(b) : false;
+            else {
+                result = null;
+                break;
+            }
+        }
+    }
+    if (result)
+        return result;
+    throw new Error(`wrong withTags option.`);
+}
+
 function parse(data, opts) {
     data.withTags = opts.withTags;
     data.withInfo = opts.withInfo;
-    const filter = opts.filter;
-    data.filter = {
-        node: filter?.node ? new Set(filter.node) : null,
-        way: filter?.way ? new Set(filter.way) : null,
-        relation: filter?.relation ? new Set(filter.relation) : null
-    }
     data.strings = data.stringtable.s.map(b => b.toString('utf8'));
     data.date_granularity = data.date_granularity || 1000;
     data.granularity = (!data.granularity || data.granularity == 100) ? 1e7
@@ -226,9 +241,9 @@ function parse_rel(r, data) {
         id: r.id,
         members: members
     }
-    if (data.withTags) {
+    if (data.withTags.relation) {
         assertArrays(r.keys, r.vals);
-        const filter = data.filter.relation;
+        const filter = data.withTags.relation === true ? false : data.withTags.relation;
         const tags = {};
         for (let i = 0; i < r.keys.length; i++) {
             const key = strings[r.keys[i]], val = strings[r.vals[i]];
@@ -258,9 +273,9 @@ function parse_way(w, data) {
         id: w.id,
         refs: refs
     }
-    if (data.withTags) {
+    if (data.withTags.way) {
         assertArrays(w.keys, w.vals);
-        const filter = data.filter.way;
+        const filter = data.withTags.way === true ? false : data.withTags.way;
         const tags = {};
         for (let i = 0; i < w.keys.length; i++) {
             const key = strings[w.keys[i]], val = strings[w.vals[i]];
@@ -286,9 +301,9 @@ function parse_node(n, data) {
         lat: data.lat_offset + n.lat / data.granularity,
         lon: data.lon_offset + n.lon / data.granularity
     }
-    if (data.withTags) {
+    if (data.withTags.node) {
         assertArrays(n.keys, n.vals);
-        const filter = data.filter.node;
+        const filter = data.withTags.node === true ? false : data.withTags.node;
         const tags = {};
         for (let i = 0; i < n.keys.length; i++) {
             const key = strings[n.keys[i]], val = strings[n.vals[i]];
@@ -326,8 +341,8 @@ function parse_dense(dense, data) {
             lat: data.lat_offset + lat / data.granularity,
             lon: data.lon_offset + lon / data.granularity
         }
-        if (data.withTags && dense.keys_vals.length > 0) {
-            const filter = data.filter.node;
+        if (data.withTags.node && dense.keys_vals.length > 0) {
+            const filter = data.withTags.node === true ? false : data.withTags.node;
             const tags = {};
             while (dense.keys_vals[j] !== 0) {
                 const key = strings[dense.keys_vals[j]];

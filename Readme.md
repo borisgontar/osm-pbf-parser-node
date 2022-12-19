@@ -102,17 +102,15 @@ export async function* createOSMStream(file: string, opts?: OSMOptions): void;
 The arguments are path to the input file in the osm.pbf format
 and an object with the following properties:
 
-* `withTags` - whether to include tags into the output.
+* `withTags` - whether to include (and which) tags into the output.
+Can be a boolean, or an object {node: _what_, way: _what_, relation: _what_},
+where each _what_ is in turn either `true` (the default) or `false` or an array
+of keys of tags to include. In the latter case all other tags are
+not included, so `withTags.node == []` is the same as `withTags.node = false`.
 
 * `withInfo` - whether to include metadata information into output.
 
 * `syncMode` - whether to use `inflate` or `inflateSync` from node:zlib.
-
-* `filter` - an object with optional properties `node`, `way` and `relation`,
-each of them is a string array with accepted tag keys. Tags with all
-other keys are ignored. If `filter` is absent, all tags are accepted.
-If, for example, filter.node is absent, all node tags are accepted,
-but if it's an empty array, all node tags are ignored.
 
 The defaults are:
 ```javascript
