@@ -5,16 +5,17 @@ import { get as http_get } from 'node:http';
 
 // feel free to change the following three settings
 
-const file = '../data/cyprus-latest.osm.pbf';
+const file = '../data/canada-latest.osm.pbf';
 const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
 const opts = {
     withInfo: false,
-    withTags: {
+    /*withTags: {
         node: ['name', 'amenity', 'shop'],
         way: [],
         relation: ['boundary']
-    },
-    syncMode: false
+    },*/
+    /*withTags: true,*/
+    syncMode: true
 };
 
 const usage = `
@@ -50,8 +51,9 @@ const final = new Transform.PassThrough({
 
 // test OSMTransform
 async function proc1() {
-    console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${JSON.stringify(opts.withTags)}`);
+    console.log(`reading from ${file}`);
+    console.log(`withInfo: ${opts.withInfo}, syncMode: ${opts.syncMode}, ` +
+        `withTags: ${JSON.stringify(opts.withTags)}`)
     return new Promise(resolve => {
         createReadStream(file)
             .pipe(new OSMTransform(opts))
@@ -63,8 +65,9 @@ async function proc1() {
 
 // test createOSMStream
 async function proc2() {
-    console.log(`reading from ${file}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${JSON.stringify(opts.withTags)}`);
+    console.log(`reading from ${file}`);
+    console.log(`withInfo: ${opts.withInfo}, syncMode: ${opts.syncMode}, ` +
+        `withTags: ${JSON.stringify(opts.withTags)}`)
     for await (let item of createOSMStream(file, opts)) {
         count(item);
     }
@@ -72,8 +75,9 @@ async function proc2() {
 
 // test http get
 async function proc3() {
-    console.log(`reading from ${url}\nwithInfo: ${opts.withInfo}, ` +
-        `withTags: ${JSON.stringify(opts.withTags)}`);
+    console.log(`reading from ${url}`);
+    console.log(`withInfo: ${opts.withInfo}, syncMode: ${opts.syncMode}, ` +
+        `withTags: ${JSON.stringify(opts.withTags)}`)
     return new Promise((resolve, reject) => {
         http_get(url, res => {
             if (res.statusCode != 200) {
@@ -84,7 +88,6 @@ async function proc3() {
                 .pipe(final)
                 .on('finish', resolve);
         });
-
     });
 }
 

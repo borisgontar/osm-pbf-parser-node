@@ -105,7 +105,7 @@ and an object with the following properties:
 * `withTags` - whether to include (and which) tags into the output.
 Can be a boolean, or an object {node: _what_, way: _what_, relation: _what_},
 where each _what_ is in turn either `true` (the default) or `false` or an array
-of keys of tags to include. In the latter case all other tags are
+of tag keys to include. In the latter case all other tags are
 not included, so `withTags.node == []` is the same as `withTags.node = false`.
 
 * `withInfo` - whether to include metadata information into output.
@@ -114,7 +114,7 @@ not included, so `withTags.node == []` is the same as `withTags.node = false`.
 
 The defaults are:
 ```javascript
-{ withTags: true, withInfo: false, syncMode: false }
+{ withTags: true, withInfo: false, syncMode: true }
 ```
 
 The module also exports the OSMTransform class:
@@ -171,20 +171,22 @@ See file `test.js` for a complete example.
 ## Performance
 
 The script `test.js` does nothing but counts nodes, ways and relations
-in the input stream. Here is the output for canada-latest.osm.pbf
-as of Nov. 2022, about 2.75 GB in size, on my ASUS StudioBook
-(i7-9750H, DDR4-2666):
+in the input stream. Here is the speed of parsing canada-latest.osm.pbf
+as of Nov. 2022, about 2.75 GB in size, using OSMTransform with
+syncMode=true, withTags=true, withInfo=false:
 
-* using OSMTransform: 2m51s, about 2.36 millions items per second
+* on ASUS StudioBook (i7-9750H, DDR4-2666): 2m50s, about 2.37 millions items per second.
 
-* using createOSMStream: 4m35s, about 1.47 millions items per second
+* on Intel NUC-12 (i9-12900, DDR4-3200, NVMe SSD): 1m55s, about 3.5
+millions items per second.
 
-Apparenlty, the speed of createOSMStream is 1.6 times lower because it executes
+The speed of createOSMStream is about 1.6 times lower, apparently because it executes
 `yield` millions of times.
 
-By default this module uses the asynchronous `inflate` from `node:zlib'.
-It results in better speed (I haven't seen more that 10% though)
-but uses more memory. You can switch to `inflateSync` by setting `syncMode`
+By default this module uses the synchronous `inflateSync` from `node:zlib'.
+The asynchronous `inflate` may result in better speed
+(I haven't seen more that 10% though)
+but uses considerably more memory. You can switch to `inflate` by setting `syncMode`
 to `false`.
 
 ## Limitations

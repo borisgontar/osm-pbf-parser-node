@@ -5,6 +5,8 @@ import Pbf from 'pbf';
 import { Blob as BlobData, BlobHeader } from './proto/fileformat.js';
 import { HeaderBlock, PrimitiveBlock } from './proto/osmformat.js';
 
+const debug = false;     // print some stats
+
 const memberTypes = ['node', 'way', 'relation'];
 
 function assert(cond, message) {
@@ -40,9 +42,9 @@ export class OSMTransform extends Transform {
             readableHighWaterMark: 2
         }));
         this.with = {
-            withTags: with_tags(osmopts.withTags),
+            withTags: with_tags(osmopts.withTags ?? true),
             withInfo: osmopts.withInfo ?? false,
-            syncMode: osmopts.syncMode ?? false
+            syncMode: osmopts.syncMode ?? true
         };
         /** @type {Buffer} */
         this.buffer = null;
@@ -52,11 +54,14 @@ export class OSMTransform extends Transform {
         this.needed = 4;     // number of bytes required in the buffer
         this.jobs = 0;       // number of unfinished inflates
         this.done = null;
-        //this.maxjobs = 0; // --
-        //this.maxdepo = 0; // --
         this.tally = 0;      // counts incoming OSMData blocks
         this.count = 0;      // tally of the last pushed batch
         this.depot = new Map();  // seqnum -> batch
+        if (debug) {
+            this.maxjobs = 0;
+            this.maxdepo = 0;
+            this.inflate_ns = 0n;   // inflateSync total time
+        }
     }
 
     _transform(chunk, encoding, next) {
@@ -94,7 +99,7 @@ export class OSMTransform extends Transform {
                 advance(header.datasize);
                 this.status = header.type == 'OSMHeader' ? 2 : 3
             }
-            else if (this.status == 2) {   // expectong OSMHeader
+            else if (this.status == 2) {   // expecting OSMHeader
                 const blob = BlobData.read(pbf);
                 const buf = blob.zlib_data ? inflateSync(blob.zlib_data) : blob.raw;
                 assert(buf, `inflating ${blob.data} not implemented`);
@@ -108,14 +113,18 @@ export class OSMTransform extends Transform {
                 const blob = BlobData.read(pbf);
                 assert(blob.zlib_data, `inflating ${blob.data} not implemented`);
                 if (this.with.syncMode) {
+                    const start = process.hrtime.bigint();
                     const buf = inflateSync(blob.zlib_data);
+                    if (debug)
+                        this.inflate_ns += process.hrtime.bigint() - start;
                     const data = PrimitiveBlock.read(new Pbf(buf));
                     this.push(parse(data, this.with));
                 }
                 else {
                     blob.tally = ++this.tally;
                     ++this.jobs;
-                    //this.maxjobs = Math.max(this.maxjobs, this.jobs);  // --
+                    if (debug)
+                        this.maxjobs = Math.max(this.maxjobs, this.jobs);
                     inflate(blob.zlib_data, (err, buf) => {
                         assert(!err, `error uncompressing OSMData: ${err}`);
                         blob.zlib_data = null;    // no longer needed
@@ -127,7 +136,8 @@ export class OSMTransform extends Transform {
                             ++this.count;
                         } else
                             this.depot.set(tally, batch);
-                        //this.maxdepo = Math.max(this.maxdepo, this.depot.size); // --
+                        if (debug)
+                            this.maxdepo = Math.max(this.maxdepo, this.depot.size);
                         while (this.depot.has(this.count + 1)) {
                             this.push(this.depot.get(++this.count));
                             this.depot.delete(this.count);
@@ -149,8 +159,16 @@ export class OSMTransform extends Transform {
     }
 
     _flush(callback) {
-        //console.log(`max jobs: ${this.maxjobs}`);
-        //console.log(`max depot size: ${this.maxdepo}`);
+        if (debug) {
+            if (this.with.syncMode) {
+                let sec = Number(this.inflate_ns) * 1e-9;
+                console.log(`inflateSync took ${sec.toFixed(3)} sec.`);
+            } else {
+                console.log(`max inflate jobs: ${this.maxjobs}`);
+                console.log(`max depot size: ${this.maxdepo}`);
+            }
+        }
+        assert(this.buffer.length == this.offset && this.status == 0);
         if (this.jobs == 0) {
             this.flush_depot();
             callback();
@@ -165,7 +183,10 @@ export class OSMTransform extends Transform {
 
     flush_depot() {
         const keys = Array.from(this.depot.keys());
+        if (debug && keys.length > 0)
+            console.log(`flush depot: ${keys.length} remained`);
         for (let n of keys.sort((x, y) => x - y)) {
+            assert(n == ++this.count);
             this.push(this.depot.get(n));
         }
     }
@@ -325,7 +346,7 @@ function parse_dense(dense, data) {
     const dinfo = dense.denseinfo;
     let id = 0, lat = 0, lon = 0;
     let timestamp = 0, changeset = 0;
-    let uid = 0, user = 0;
+    let uid = 0, user_sid = 0;
     //
     assertArrays(dense.id, dense.lat, dense.lon);
     const strings = data.strings;
@@ -361,19 +382,16 @@ function parse_dense(dense, data) {
             timestamp += dinfo.timestamp[i];
             changeset += dinfo.changeset[i];
             uid += dinfo.uid[i];
-            user += dinfo.user_sid[i];
+            user_sid += dinfo.user_sid[i];
             //
-            const info = {};
-            info.version = dinfo.version[i];
-            let num = timestamp * data.date_granularity;
-            info.timestamp = new Date(num).toISOString().substring(0, 19) + 'Z';
-            info.changeset = changeset;
-            if (uid)
-                info.uid = uid;
-            if (strings[user])
-                info.user = strings[user]
-            if (dinfo.visible[i] === false)
-                info.visible = false;
+            const info = fill_info(data, {
+                version: dinfo.version[i],
+                timestamp: timestamp,
+                changeset: changeset,
+                uid: uid,
+                user_sid: user_sid,
+                visible: dinfo.visible[i]
+            });
             if (!isEmpty(info))
                 node.info = info;
         }
@@ -386,10 +404,8 @@ function fill_info(data, info) {
     const ret = {};
     if (info.version !== 0)
         ret.version = info.version;
-    if (info.timestamp !== 0) {
-        let num = info.timestamp * data.date_granularity;
-        ret.timestamp = new Date(num).toISOString().substring(0, 19) + 'Z';
-    }
+    if (info.timestamp !== 0)
+        ret.timestamp = info.timestamp * data.date_granularity;
     if (info.changeset !== 0)
         ret.changeset = info.changeset;
     if (info.uid !== 0)
