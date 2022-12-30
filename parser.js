@@ -1,5 +1,5 @@
 import { Transform } from 'node:stream';
-import { inflateSync, inflate } from 'node:zlib';
+import { inflateSync } from 'node:zlib';
 import { createReadStream } from 'node:fs';
 import Pbf from 'pbf';
 import { Blob as BlobData, BlobHeader } from './proto/fileformat.js';
@@ -39,7 +39,7 @@ export class OSMTransform extends Transform {
             writableObjectMode: false,
             writableHighWaterMark: 0,
             readableObjectMode: true,
-            readableHighWaterMark: 2
+            readableHighWaterMark: 1
         }));
         this.with = {
             withTags: with_tags(osmopts.withTags ?? true),
@@ -161,12 +161,17 @@ function with_tags(opt) {
 /**
  * Returns array of either nodes, ways or relations.
  * @param {Buffer} buf Inflated OSMData block
- * @param {OSMTransform} that
+ * @param {OSMTransform | OSMOptions} that
  */
 export function parse(buf, that) {
     const data = PrimitiveBlock.read(new Pbf(buf));
-    data.withTags = that.with.withTags;
-    data.withInfo = that.with.withInfo;
+    if (that instanceof OSMTransform) {
+        data.withTags = that.with.withTags;
+        data.withInfo = that.with.withInfo;
+    } else {
+        data.withTags = with_tags(that.withTags ?? true);
+        data.withInfo = that.withInfo ?? false;
+    }
     data.strings = data.stringtable.s.map(b => b.toString('utf8'));
     data.date_granularity = data.date_granularity || 1000;
     data.granularity = (!data.granularity || data.granularity == 100) ? 1e7

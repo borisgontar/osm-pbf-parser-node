@@ -58,22 +58,19 @@ const final = new Transform.PassThrough({
     }
 });
 
-class RawWritable extends Writable {
-    constructor(that) {
-        super({ objectMode: true });
-        this.osmtrans = that;
-    }
-    _write(chunk, enc, next) {
+const rawWritable = new Writable({
+    objectMode: true,
+    write(chunk, enc, next) {
         if (chunk instanceof Buffer) {
             let buf = inflateSync(chunk);
-            let batch = parse(buf, this.osmtrans);
+            let batch = parse(buf, opts);
             for (let item of batch)
                 count(item);
         } else
             header(chunk[0]);
         next();
     }
-}
+});
 
 // test OSMTransform
 async function test1() {
@@ -121,10 +118,9 @@ async function test3() {
 async function test4() {
     console.log(`reading from ${file} in raw mode`);
     return new Promise(resolve => {
-        let osmtrans = new OSMTransform({writeRaw: true});
         createReadStream(file)
-            .pipe(osmtrans)
-            .pipe(new RawWritable(osmtrans))
+            .pipe(new OSMTransform({ writeRaw: true }))
+            .pipe(rawWritable)
             .on('finish', resolve)
             .on('error', e => console.error(e));
     });

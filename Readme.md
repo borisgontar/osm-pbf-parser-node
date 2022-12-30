@@ -172,35 +172,37 @@ See file `test.js` for a complete example.
 
 If `writeRaw` is `true`, OSMTransform pushes compressed OSMData blocks
 into output. In this case the next Writable in the pipeline should
-inflate the data blocks and call parse to convert them into an array
-of nodes, etc. For example:
+inflate the data blocks and call `parse` to convert them into an array
+of nodes, etc. The package export this function as:
+```javascript
+export function parse(osmdata: Buffer, options: OSMTransform|OSMOptions): Array<any>;
+```
+
+ For example:
 ```javascript
 new Promise(resolve => {
     let osmtrans = new OSMTransform({writeRaw: true});
     createReadStream(file)
-        .pipe(osmtrans)
-        .pipe(new RawWritable(osmtrans))
+        .pipe(new OSMTransform({writeRaw: true}))
+        .pipe(rawWritable)
         .on('finish', resolve)
         .on('error', e => console.error(e));
 });
 ```
-where the RawWritable class does the real job:
+where the RawWritable class does the job:
 ```javascript
-class RawWritable extends Writable {
-    constructor(osmtrans) {
-        super({ objectMode: true });
-        this.osmtrans = osmtrans;
-    }
-    _write(chunk, enc, next) {
+const rawWritable = new Writable({
+    objectMode: true,
+    write(chunk, enc, next) {
         if (chunk instanceof Buffer) {
             let buf = inflateSync(chunk);
-            let batch = parse(buf, this.osmtrans);
+            let batch = parse(buf, {withTags: true, withInfo: false});
             // ... do something with batch
         } else
-            // chunk[0] must be the OSMHeader
+            // chunk[0] contains OSM Header
         next();
     }
-}
+});
 ```
 
 ## Performance
