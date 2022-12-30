@@ -110,11 +110,11 @@ not included, so `withTags.node == []` is the same as `withTags.node = false`.
 
 * `withInfo` - whether to include metadata information into output.
 
-* `syncMode` - whether to use `inflate` or `inflateSync` from node:zlib.
+* `writeRaw` - if `true`, send raw OSMData block to the output, see an example below.
 
 The defaults are:
 ```javascript
-{ withTags: true, withInfo: false, syncMode: true }
+{ withTags: true, withInfo: false, writeRaw: false }
 ```
 
 The module also exports the OSMTransform class:
@@ -134,7 +134,7 @@ new Promise(resolve => {
 });
 
 ```
-where `consume` is the final Writable. For example,
+where `consume` is the next Writable. For example,
 the following code just prints out all received objects:
 ```javascript
 const consume = new Transform.PassThrough({
@@ -168,26 +168,59 @@ new Promise((resolve, reject) => {
 ```
 See file `test.js` for a complete example.
 
+## Raw output
+
+If `writeRaw` is `true`, OSMTransform pushes compressed OSMData blocks
+into output. In this case the next Writable in the pipeline should
+inflate the data blocks and call parse to convert them into an array
+of nodes, etc. For example:
+```javascript
+new Promise(resolve => {
+    let osmtrans = new OSMTransform({writeRaw: true});
+    createReadStream(file)
+        .pipe(osmtrans)
+        .pipe(new RawWritable(osmtrans))
+        .on('finish', resolve)
+        .on('error', e => console.error(e));
+});
+```
+where the RawWritable class does the real job:
+```javascript
+class RawWritable extends Writable {
+    constructor(osmtrans) {
+        super({ objectMode: true });
+        this.osmtrans = osmtrans;
+    }
+    _write(chunk, enc, next) {
+        if (chunk instanceof Buffer) {
+            let buf = inflateSync(chunk);
+            let batch = parse(buf, this.osmtrans);
+            // ... do something with batch
+        } else
+            // chunk[0] must be the OSMHeader
+        next();
+    }
+}
+```
+
 ## Performance
 
 The script `test.js` does nothing but counts nodes, ways and relations
 in the input stream. Here is the speed of parsing canada-latest.osm.pbf
 as of Nov. 2022, about 2.75 GB in size, using OSMTransform with
-syncMode=true, withTags=true, withInfo=false:
+withTags=true, withInfo=false:
 
 * on ASUS StudioBook (i7-9750H, DDR4-2666): 2m50s, about 2.37 millions items per second.
 
 * on Intel NUC-12 (i9-12900, DDR4-3200, NVMe SSD): 1m55s, about 3.5
 millions items per second.
 
+For some reason parsing of really big files is slower. Parsing 67GB of
+planet-latest.osm.pbf took 1h22m (1.8 millions items per second) on NUC-12.
+
 The speed of createOSMStream is about 1.6 times lower, apparently because it executes
 `yield` millions of times.
 
-By default this module uses the synchronous `inflateSync` from `node:zlib'.
-The asynchronous `inflate` may result in better speed
-(I haven't seen more that 10% though)
-but uses considerably more memory. You can switch to `inflate` by setting `syncMode`
-to `false`.
 
 ## Limitations
 
@@ -196,6 +229,12 @@ the compressed data in `zlib_data`. Other compression methods are not
 implemented.
 
 ## Notes
+
+This module uses the synchronous `inflateSync` from `node:zlib`.
+The asynchronous `inflate` may result in a better speed, but
+I haven't seen more that 10% faster. On the other hand it
+uses considerably more memory. To my opinion, using the `writeRaw` mode
+and worker threads on the Writable side leads to much better results.
 
 The proto files have been updated from
 https://github.com/openstreetmap/OSM-binary/tree/master/osmpbf

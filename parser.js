@@ -44,7 +44,7 @@ export class OSMTransform extends Transform {
         this.with = {
             withTags: with_tags(osmopts.withTags ?? true),
             withInfo: osmopts.withInfo ?? false,
-            syncMode: osmopts.syncMode ?? true
+            writeRaw: osmopts.writeRaw ?? false
         };
         /** @type {Buffer} */
         this.buffer = null;
@@ -52,14 +52,7 @@ export class OSMTransform extends Transform {
         this.status = 0;     // 0: header length, 1: header,
                              // 2: OSMHeader, 3: OSMData
         this.needed = 4;     // number of bytes required in the buffer
-        this.jobs = 0;       // number of unfinished inflates
-        this.done = null;
-        this.tally = 0;      // counts incoming OSMData blocks
-        this.count = 0;      // tally of the last pushed batch
-        this.depot = new Map();  // seqnum -> batch
         if (debug) {
-            this.maxjobs = 0;
-            this.maxdepo = 0;
             this.inflate_ns = 0n;   // inflateSync total time
         }
     }
@@ -112,39 +105,14 @@ export class OSMTransform extends Transform {
             else if (this.status == 3) {    // expecting OSMData
                 const blob = BlobData.read(pbf);
                 assert(blob.zlib_data, `inflating ${blob.data} not implemented`);
-                if (this.with.syncMode) {
+                if (this.with.writeRaw)
+                    this.push(blob.zlib_data);
+                else {
                     const start = process.hrtime.bigint();
                     const buf = inflateSync(blob.zlib_data);
                     if (debug)
                         this.inflate_ns += process.hrtime.bigint() - start;
-                    const data = PrimitiveBlock.read(new Pbf(buf));
-                    this.push(parse(data, this.with));
-                }
-                else {
-                    blob.tally = ++this.tally;
-                    ++this.jobs;
-                    if (debug)
-                        this.maxjobs = Math.max(this.maxjobs, this.jobs);
-                    inflate(blob.zlib_data, (err, buf) => {
-                        assert(!err, `error uncompressing OSMData: ${err}`);
-                        blob.zlib_data = null;    // no longer needed
-                        const tally = blob.tally;
-                        const data = PrimitiveBlock.read(new Pbf(buf));
-                        const batch = parse(data, this.with);
-                        if (tally == this.count + 1) {
-                            this.push(batch);
-                            ++this.count;
-                        } else
-                            this.depot.set(tally, batch);
-                        if (debug)
-                            this.maxdepo = Math.max(this.maxdepo, this.depot.size);
-                        while (this.depot.has(this.count + 1)) {
-                            this.push(this.depot.get(++this.count));
-                            this.depot.delete(this.count);
-                        }
-                        if (--this.jobs == 0 && this.done)
-                            this.done.resolve();
-                    });
+                    this.push(parse(buf, this));
                 }
                 this.offset += this.needed;
                 this.needed = 4;   // next header length follows
@@ -160,35 +128,11 @@ export class OSMTransform extends Transform {
 
     _flush(callback) {
         if (debug) {
-            if (this.with.syncMode) {
-                let sec = Number(this.inflate_ns) * 1e-9;
-                console.log(`inflateSync took ${sec.toFixed(3)} sec.`);
-            } else {
-                console.log(`max inflate jobs: ${this.maxjobs}`);
-                console.log(`max depot size: ${this.maxdepo}`);
-            }
+            let sec = Number(this.inflate_ns) * 1e-9;
+            console.log(`inflateSync took ${sec.toFixed(3)} sec.`);
         }
         assert(this.buffer.length == this.offset && this.status == 0);
-        if (this.jobs == 0) {
-            this.flush_depot();
-            callback();
-        } else {
-            new Promise(resolve => this.done = { resolve })
-                .then(() => {
-                    this.flush_depot();
-                    callback();
-                });
-        }
-    }
-
-    flush_depot() {
-        const keys = Array.from(this.depot.keys());
-        if (debug && keys.length > 0)
-            console.log(`flush depot: ${keys.length} remained`);
-        for (let n of keys.sort((x, y) => x - y)) {
-            assert(n == ++this.count);
-            this.push(this.depot.get(n));
-        }
+        callback();
     }
 }
 
@@ -214,9 +158,15 @@ function with_tags(opt) {
     throw new Error(`wrong withTags option.`);
 }
 
-function parse(data, opts) {
-    data.withTags = opts.withTags;
-    data.withInfo = opts.withInfo;
+/**
+ * Returns array of either nodes, ways or relations.
+ * @param {Buffer} buf Inflated OSMData block
+ * @param {OSMTransform} that
+ */
+export function parse(buf, that) {
+    const data = PrimitiveBlock.read(new Pbf(buf));
+    data.withTags = that.with.withTags;
+    data.withInfo = that.with.withInfo;
     data.strings = data.stringtable.s.map(b => b.toString('utf8'));
     data.date_granularity = data.date_granularity || 1000;
     data.granularity = (!data.granularity || data.granularity == 100) ? 1e7
@@ -248,14 +198,14 @@ function parse(data, opts) {
 function parse_rel(r, data) {
     const strings = data.strings;
     assertArrays(r.memids, r.types, r.roles_sid);
-    const members = [];
+    const members = Array(r.memids.length);
     let ref = 0;
     for (let i = 0; i < r.memids.length; i++) {
-        members.push({
+        members[i] = {
             type: memberTypes[r.types[i]],
             ref: ref += r.memids[i],
             role: strings[r.roles_sid[i]]
-        });
+        };
     }
     const rel = {
         type: 'relation',
@@ -284,10 +234,10 @@ function parse_rel(r, data) {
 
 function parse_way(w, data) {
     const strings = data.strings;
-    const refs = [];
+    const refs = Array(w.refs.length);
     let ref = 0;
     for (let i = 0; i < w.refs.length; i++) {
-        refs.push(ref += w.refs[i]);
+        refs[i] = (ref += w.refs[i]);
     }
     const way = {
         type: 'way',
@@ -350,7 +300,7 @@ function parse_dense(dense, data) {
     //
     assertArrays(dense.id, dense.lat, dense.lon);
     const strings = data.strings;
-    const nodes = [];
+    const nodes = Array(dense.id.length);
     let j = 0;
     for (let i = 0; i < dense.id.length; i++) {
         id += dense.id[i];
@@ -395,7 +345,7 @@ function parse_dense(dense, data) {
             if (!isEmpty(info))
                 node.info = info;
         }
-        nodes.push(node);
+        nodes[i] = node;
     }
     return nodes;
 }

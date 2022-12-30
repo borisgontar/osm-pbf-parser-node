@@ -1,11 +1,12 @@
 import { createReadStream } from 'node:fs';
-import { Transform } from 'node:stream';
-import { createOSMStream, OSMTransform } from './parser.js';
+import { Transform, Writable } from 'node:stream';
+import { createOSMStream, OSMTransform, parse } from './parser.js';
 import { get as http_get } from 'node:http';
+import { inflateSync } from 'node:zlib';
 
 // feel free to change the following three settings
 
-const file = '../data/canada-latest.osm.pbf';
+const file = '../data/cyprus-latest.osm.pbf';
 const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
 const opts = {
     withInfo: false,
@@ -14,18 +15,26 @@ const opts = {
         way: [],
         relation: ['boundary']
     },*/
-    /*withTags: true,*/
-    syncMode: true
+    withTags: true
 };
 
 const usage = `
 arg = 1: test OSMTransform
       2: test createOSMStream
       3: test http get
+      4: test writeRaw
       0: print everything out
 `;
 
 let n = 0, w = 0, r = 0;
+
+function header(item) {
+    let seqno = item.osmosis_replication_sequence_number,
+        url = item.osmosis_replication_base_url,
+        tms = item.osmosis_replication_timestamp;
+    let str = new Date(tms * 1000).toUTCString().substring(5);
+    console.log(`header: seqno: ${seqno}, timestamp: ${str}, url: ${url}`);
+}
 
 function count(item) {
     if (item.type == 'node')
@@ -35,7 +44,7 @@ function count(item) {
     else if (item.type == 'relation')
         ++r;
     else if (item.bbox)
-        console.log('header');
+        header(item);
     else
         console.log('bug');
 }
@@ -49,10 +58,27 @@ const final = new Transform.PassThrough({
     }
 });
 
+class RawWritable extends Writable {
+    constructor(that) {
+        super({ objectMode: true });
+        this.osmtrans = that;
+    }
+    _write(chunk, enc, next) {
+        if (chunk instanceof Buffer) {
+            let buf = inflateSync(chunk);
+            let batch = parse(buf, this.osmtrans);
+            for (let item of batch)
+                count(item);
+        } else
+            header(chunk[0]);
+        next();
+    }
+}
+
 // test OSMTransform
-async function proc1() {
+async function test1() {
     console.log(`reading from ${file}`);
-    console.log(`withInfo: ${opts.withInfo}, syncMode: ${opts.syncMode}, ` +
+    console.log(`withInfo: ${opts.withInfo}, ` +
         `withTags: ${JSON.stringify(opts.withTags)}`)
     return new Promise(resolve => {
         createReadStream(file)
@@ -64,9 +90,9 @@ async function proc1() {
 }
 
 // test createOSMStream
-async function proc2() {
+async function test2() {
     console.log(`reading from ${file}`);
-    console.log(`withInfo: ${opts.withInfo}, syncMode: ${opts.syncMode}, ` +
+    console.log(`withInfo: ${opts.withInfo}, ` +
         `withTags: ${JSON.stringify(opts.withTags)}`)
     for await (let item of createOSMStream(file, opts)) {
         count(item);
@@ -74,9 +100,9 @@ async function proc2() {
 }
 
 // test http get
-async function proc3() {
+async function test3() {
     console.log(`reading from ${url}`);
-    console.log(`withInfo: ${opts.withInfo}, syncMode: ${opts.syncMode}, ` +
+    console.log(`withInfo: ${opts.withInfo}, ` +
         `withTags: ${JSON.stringify(opts.withTags)}`)
     return new Promise((resolve, reject) => {
         http_get(url, res => {
@@ -91,8 +117,21 @@ async function proc3() {
     });
 }
 
+// test writeRaw
+async function test4() {
+    console.log(`reading from ${file} in raw mode`);
+    return new Promise(resolve => {
+        let osmtrans = new OSMTransform({writeRaw: true});
+        createReadStream(file)
+            .pipe(osmtrans)
+            .pipe(new RawWritable(osmtrans))
+            .on('finish', resolve)
+            .on('error', e => console.error(e));
+    });
+}
+
 // print out everything
-async function proc0() {
+async function test0() {
     const opts0 = { withInfo: true, withTags: true };
     for await (let item of createOSMStream(file, opts0)) {
         process.stdout.write(JSON.stringify(item) + '\n');
@@ -100,12 +139,12 @@ async function proc0() {
 }
 
 let arg = Number(process.argv[2]);
-if (!Number.isInteger(arg) || arg < 0 || arg > 3) {
+if (!Number.isInteger(arg) || arg < 0 || arg > 4) {
     process.stderr.write(usage);
     process.exit(1);
 }
 
-const proc = [proc0, proc1, proc2, proc3];
+const proc = [test0, test1, test2, test3, test4];
 
 try {
     if (arg > 0)

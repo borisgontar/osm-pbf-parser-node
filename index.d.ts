@@ -7,7 +7,7 @@ declare module 'osm-pbf-parser-node' {
     export interface OSMOptions {
         withTags?: boolean | {node?: WithTags, way?: WithTags, relation?: WithTags},
         withInfo?: boolean,
-        syncMode?: boolean
+        writeRaw?: boolean
     };
 
     export class OSMTransform extends Transform {
@@ -15,4 +15,6 @@ declare module 'osm-pbf-parser-node' {
     }
 
     export async function* createOSMStream(file: string, opts?: OSMOptions): void;
+
+    export function parse(osmdata: Buffer, transform: OSMTransform): Array<any>;
 }
