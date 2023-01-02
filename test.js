@@ -10,12 +10,11 @@ const file = '../data/cyprus-latest.osm.pbf';
 const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
 const opts = {
     withInfo: false,
-    /*withTags: {
+    withTags: {
         node: ['name', 'amenity', 'shop'],
         way: [],
         relation: ['boundary']
-    },*/
-    withTags: true
+    }
 };
 
 const usage = `
@@ -63,7 +62,7 @@ const rawWritable = new Writable({
     write(chunk, enc, next) {
         if (chunk instanceof Buffer) {
             let buf = inflateSync(chunk);
-            let batch = parse(buf, opts);
+            let batch = parse(buf, opts.withTags);
             for (let item of batch)
                 count(item);
         } else

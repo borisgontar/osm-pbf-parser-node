@@ -169,7 +169,7 @@ export function parse(buf, that) {
         data.withTags = that.with.withTags;
         data.withInfo = that.with.withInfo;
     } else {
-        data.withTags = with_tags(that.withTags ?? true);
+        data.withTags = with_tags(that ?? true);
         data.withInfo = that.withInfo ?? false;
     }
     data.strings = data.stringtable.s.map(b => b.toString('utf8'));
