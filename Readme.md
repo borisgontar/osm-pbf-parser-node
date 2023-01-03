@@ -181,7 +181,6 @@ export function parse(osmdata: Buffer, options: OSMTransform|OSMOptions): Array<
  For example:
 ```javascript
 new Promise(resolve => {
-    let osmtrans = new OSMTransform({writeRaw: true});
     createReadStream(file)
         .pipe(new OSMTransform({writeRaw: true}))
         .pipe(rawWritable)

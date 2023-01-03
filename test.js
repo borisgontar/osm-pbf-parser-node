@@ -6,9 +6,8 @@ import { inflateSync } from 'node:zlib';
 
 // feel free to change the following three settings
 
-const file = '../data/cyprus-latest.osm.pbf';
-const url = 'http://download.geofabrik.de/europe/cyprus-latest.osm.pbf';
-const opts = {
+let file = '../data/cyprus-latest.osm.pbf';
+let opts = {
     withInfo: false,
     withTags: {
         node: ['name', 'amenity', 'shop'],
@@ -18,11 +17,12 @@ const opts = {
 };
 
 const usage = `
-arg = 1: test OSMTransform
-      2: test createOSMStream
-      3: test http get
-      4: test writeRaw
-      0: print everything out
+arg1 = 1: test OSMTransform
+       2: test createOSMStream
+       3: test http get
+       4: test writeRaw
+       0: print everything out,
+arg2 = file name or URL.
 `;
 
 let n = 0, w = 0, r = 0;
@@ -97,11 +97,11 @@ async function test2() {
 
 // test http get
 async function test3() {
-    console.log(`reading from ${url}`);
+    console.log(`reading from ${file}`);
     console.log(`withInfo: ${opts.withInfo}, ` +
         `withTags: ${JSON.stringify(opts.withTags)}`)
     return new Promise((resolve, reject) => {
-        http_get(url, res => {
+        http_get(file, res => {
             if (res.statusCode != 200) {
                 console.log(`got status code ${res.statusCode} ${res.statusMessage}`);
                 return reject('request failed');
@@ -136,6 +136,11 @@ async function test0() {
 let arg = Number(process.argv[2]);
 if (!Number.isInteger(arg) || arg < 0 || arg > 4) {
     process.stderr.write(usage);
+    process.exit(1);
+}
+if (!(file = process.argv[3])) {
+    process.stderr.write(usage);
+    console.log('Please specify ' + (arg == 3 ? 'URL' : 'file name'));
     process.exit(1);
 }
 
