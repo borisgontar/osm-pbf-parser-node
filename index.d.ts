@@ -14,7 +14,8 @@ declare module 'osm-pbf-parser-node' {
         constructor(osmopts?: OSMOptions, opts?: TransformOptions);
     }
 
-    export async function* createOSMStream(file: string, opts?: OSMOptions): void;
+    export async function* createOSMStream(file: string, opts?: OSMOptions): 
+	    AsyncGenerator<object, void, unknown>;
 
-    export function parse(osmdata: Buffer, transform: OSMTransform|OSMOptions): Array<any>;
+    export function parse(osmdata: Buffer, transform: OSMTransform|OSMOptions): Array<object>;
 }

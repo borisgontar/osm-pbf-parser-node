@@ -97,7 +97,8 @@ npm install osm-pbf-parser-node
 
 The module exports an async generator function:
 ```javascript
-export async function* createOSMStream(file: string, opts?: OSMOptions): void;
+export async function* createOSMStream(file: string, opts?: OSMOptions):
+    AsyncGenerator<object, void, unknown>;
 ```
 The arguments are path to the input file in the osm.pbf format
 and an object with the following properties:
@@ -175,7 +176,7 @@ into output. In this case the next Writable in the pipeline should
 inflate the data blocks and call `parse` to convert them into an array
 of nodes, etc. The package export this function as:
 ```javascript
-export function parse(osmdata: Buffer, options: OSMTransform|OSMOptions): Array<any>;
+export function parse(osmdata: Buffer, options: OSMTransform|OSMOptions): Array<object>;
 ```
 
  For example:
