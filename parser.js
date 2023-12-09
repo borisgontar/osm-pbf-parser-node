@@ -187,7 +187,8 @@ export function parse(buf, that) {
                 batch.push(parse_node(n, data));
         }
         if (p.dense)
-            batch.push(...parse_dense(p.dense, data));
+            safepush(batch, parse_dense(p.dense, data));
+            //batch.push(...parse_dense(p.dense, data));
         if (p.ways) {
             for (const w of p.ways)
                 batch.push(parse_way(w, data));
@@ -373,6 +374,17 @@ function fill_info(data, info) {
     if (info.visible === false)
         ret.visible = false;
     return ret;
+}
+
+/* Large src arrays cause dst.push(...src) to fail */
+function safepush(dst, src) {
+    const MAXLEN = 1000000;
+    if (src.length < MAXLEN)
+        dst.push(...src);
+    else {
+        for (let p of src)
+            dst.push(p);
+    }
 }
 
 export async function* createOSMStream(file, opts) {
