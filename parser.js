@@ -378,7 +378,7 @@ function fill_info(data, info) {
 
 /* Large src arrays cause dst.push(...src) to fail */
 function safepush(dst, src) {
-    const MAXLEN = 1000000;
+    const MAXLEN = 100000;
     if (src.length < MAXLEN)
         dst.push(...src);
     else {
