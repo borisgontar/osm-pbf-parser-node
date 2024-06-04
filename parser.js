@@ -48,7 +48,7 @@ export class OSMTransform extends Transform {
         this.buffer = null;
         this.offset = 0;     // current offset in the buffer
         this.status = 0;     // 0: header length, 1: header,
-                             // 2: OSMHeader, 3: OSMData
+        // 2: OSMHeader, 3: OSMData
         this.needed = 4;     // number of bytes required in the buffer
         if (debug) {
             this.inflate_ns = 0n;   // inflateSync total time
@@ -176,7 +176,7 @@ export function parse(buf, that) {
         : 1e9 / data.granularity;
     data.lat_offset *= 1e-9;
     data.lon_offset *= 1e-9;
-    const batch = [];
+    let batch = [];
     for (const p of data.primitivegroup) {
         if (p.changesets && p.changesets.length > 0)
             throw new Error('changesets not implemented');
@@ -184,9 +184,21 @@ export function parse(buf, that) {
             for (const n of p.nodes)
                 batch.push(parse_node(n, data));
         }
-        if (p.dense)
-            safepush(batch, parse_dense(p.dense, data));
-            //batch.push(...parse_dense(p.dense, data));
+        if (p.dense) {
+            const parsed = parse_dense(p.dense, data);
+            if (batch.length == 0)
+                batch = parsed;
+            else {
+                /* Large src arrays cause dst.push(...src) to fail */
+                const MAXLEN = 100000;
+                if (parsed.length < MAXLEN)
+                    batch.push(...parsed);
+                else {
+                    for (const p of parsed)
+                        batch.push(p);
+                }
+            }
+        }
         if (p.ways) {
             for (const w of p.ways)
                 batch.push(parse_way(w, data));
@@ -374,22 +386,11 @@ function fill_info(data, info) {
     return ret;
 }
 
-/* Large src arrays cause dst.push(...src) to fail */
-function safepush(dst, src) {
-    const MAXLEN = 100000;
-    if (src.length < MAXLEN)
-        dst.push(...src);
-    else {
-        for (let p of src)
-            dst.push(p);
-    }
-}
-
 export async function* createOSMStream(file, opts) {
     const readable = createReadStream(file)
         .pipe(new OSMTransform(opts));
     for await (const chunk of readable) {
-            for (const item of chunk)
-                yield item;
+        for (const item of chunk)
+            yield item;
     }
 }
