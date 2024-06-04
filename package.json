@@ -1,6 +1,6 @@
 {
     "name": "osm-pbf-parser-node",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "description": "Streaming OpenStreetMap PBF parser for Node.js",
     "main": "parser.js",
     "type": "module",
@@ -29,7 +29,7 @@
     },
     "homepage": "https://github.com/borisgontar/osm-pbf-parser-node",
     "devDependencies": {
-        "@types/node": "^20.10.4",
-        "eslint": "^8.55.0"
+        "@types/node": "^20.12.12",
+        "eslint": "^9.3.0"
     }
 }

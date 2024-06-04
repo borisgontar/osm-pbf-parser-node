@@ -9,11 +9,11 @@ import { inflateSync } from 'node:zlib';
 let file = '../data/cyprus-latest.osm.pbf';
 let opts = {
     withInfo: false,
-    withTags: {
+    withTags: true /*{
         node: ['name', 'amenity', 'shop'],
         way: [],
         relation: ['boundary']
-    }
+    }*/
 };
 
 const usage = `

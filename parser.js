@@ -37,9 +37,7 @@ export class OSMTransform extends Transform {
     constructor(osmopts = { withTags: true, withInfo: false }, opts = {}) {
         super(Object.assign({}, opts, {
             writableObjectMode: false,
-            writableHighWaterMark: 0,
-            readableObjectMode: true,
-            readableHighWaterMark: 1
+            readableObjectMode: true
         }));
         this.with = {
             withTags: with_tags(osmopts.withTags ?? true),
